@@ -8,9 +8,29 @@
 </head>
 <body>
   <h2>🛸 UAP Whistle Summoner 🎶 - <code>v1.0.1</code></h2>
+
+  <!-- Controls -->
   <button id="startButton">Start Summoning</button>
   <button id="stopButton" disabled>Stop</button>
+
   <hr />
+
+  <!-- Export section -->
+  <label for="duration">Duration:</label>
+  <input type="number" id="duration" value="10" min="1" />
+  <select id="durationUnit">
+    <option value="seconds">Seconds</option>
+    <option value="minutes">Minutes</option>
+    <option value="hours">Hours</option>
+  </select>
+  <button id="exportButton" disabled>Export to WAV</button>
+
+  <!-- Recording status message -->
+  <p id="recordingStatus" style="font-weight: bold;"></p>
+
+  <hr />
+
+  <!-- Info table -->
   <table border="1" cellpadding="8" cellspacing="0">
     <thead>
       <tr>
@@ -53,7 +73,7 @@
         <td colspan="2">
           <strong>Origin</strong> - JasonWilde108 
           <a href="https://x.com/JasonWilde108/status/1910816547070685522?s=19" target="_blank">
-            https://x.com/JasonWilde108/status/1910816547070685522?s=19
+            link
           </a>
         </td>
       </tr>
@@ -61,7 +81,7 @@
         <td colspan="2">
           <strong>Credit</strong> - TalesOnTheGo 
           <a href="https://www.youtube.com/watch?v=Gbk63d_yb3k" target="_blank">
-            https://www.youtube.com/watch?v=Gbk63d_yb3k
+            link
           </a>
         </td>
       </tr>
@@ -77,6 +97,7 @@
   - Let it work over night
   </pre>
 
+  <!-- Main script -->
   <script src="main.js"></script>
 </body>
 </html>

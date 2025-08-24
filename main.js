@@ -2,139 +2,200 @@ function main() {
   let context;
   let nodes = [];
   let chirpInterval;
+  let pingInterval;
+  let mediaRecorder;
+  let recordedChunks = [];
+
   const startButton = document.getElementById("startButton");
   const stopButton = document.getElementById("stopButton");
+  const exportButton = document.getElementById("exportButton");
+  const statusEl = document.getElementById("recordingStatus");
 
   startButton.onclick = () => {
     context = new (window.AudioContext || window.webkitAudioContext)();
-    startAudioLayers();
+
+    // Create MediaStreamDestination to record
+    const dest = context.createMediaStreamDestination();
+    mediaRecorder = new MediaRecorder(dest.stream);
+    recordedChunks = [];
+
+    mediaRecorder.ondataavailable = e => {
+      if (e.data.size > 0) recordedChunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: "audio/wav" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "summoner_live.wav";
+      a.click();
+      URL.revokeObjectURL(url);
+
+      statusEl.style.color = "green";
+      statusEl.textContent = "✅ Recording finished, file downloaded";
+    };
+
+    buildSummonerSound(context, dest);
+
     startButton.disabled = true;
     stopButton.disabled = false;
+    exportButton.disabled = false;
+    statusEl.textContent = "";
   };
 
   stopButton.onclick = () => {
     nodes.forEach((n) => n.stop && n.stop());
     nodes = [];
     clearInterval(chirpInterval);
+    clearInterval(pingInterval);
     startButton.disabled = false;
     stopButton.disabled = true;
   };
 
-  function startAudioLayers() {
-    // 1. 7.83 Hz carrier via amplitude-modulated 100 Hz base tone
+  exportButton.onclick = () => {
+    const value = parseInt(document.getElementById("duration").value, 10);
+    const unit = document.getElementById("durationUnit").value;
+    let duration = value;
+    if (unit === "minutes") duration *= 60;
+    if (unit === "hours") duration *= 3600;
+
+    if (!mediaRecorder) return;
+
+    statusEl.style.color = "red";
+    statusEl.textContent = "🔴 Recording…";
+
+    mediaRecorder.start();
+
+    setTimeout(() => {
+      mediaRecorder.stop();
+    }, duration * 1000);
+  };
+
+  // -----------------------------
+  // Build all layers
+  // -----------------------------
+  function buildSummonerSound(ctx, dest) {
+    nodes = [];
+
+    // Helper: connect both to speakers + recorder
+    const connectOut = (node) => {
+      node.connect(ctx.destination);
+      node.connect(dest);
+    };
+
+    // 1. 7.83 Hz AM
     {
-      const carrier = context.createOscillator();
+      const carrier = ctx.createOscillator();
       carrier.frequency.value = 100;
 
-      const ampGain = context.createGain();
-      const lfo = context.createOscillator(); // 7.83 Hz LFO
-      const lfoGain = context.createGain();
+      const ampGain = ctx.createGain();
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
 
       lfo.frequency.value = 7.83;
-      lfoGain.gain.value = 0.5; // amplitude depth
+      lfoGain.gain.value = 0.5;
 
       lfo.connect(lfoGain);
       lfoGain.connect(ampGain.gain);
 
       carrier.connect(ampGain);
-      ampGain.connect(context.destination);
+      connectOut(ampGain);
 
       lfo.start();
       carrier.start();
-
       nodes.push(carrier, lfo);
     }
 
-    // 2. 528 Hz harmonic tone
+    // 2. 528 Hz tone
     {
-      const osc = context.createOscillator();
-      const gain = context.createGain();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
       osc.frequency.value = 528;
       osc.type = "sine";
       gain.gain.value = 0.05;
-      osc.connect(gain).connect(context.destination);
+      osc.connect(gain);
+      connectOut(gain);
       osc.start();
       nodes.push(osc);
     }
 
-    // 3. 17 kHz ultrasonic ping (subtle, pulsed)
+    // 3. 17 kHz pings
     {
       const ping = () => {
-        const osc = context.createOscillator();
-        const gain = context.createGain();
-        osc.frequency.value = 17 * 1000;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = 17000;
         gain.gain.value = 0.1;
-        osc.connect(gain).connect(context.destination);
+        osc.connect(gain);
+        connectOut(gain);
         osc.start();
-        osc.stop(context.currentTime + 0.05);
+        osc.stop(ctx.currentTime + 0.05);
       };
-
-      setInterval(ping, 3 * 1000); // pulse every 3 seconds
+      pingInterval = setInterval(ping, 3000);
     }
 
-    // 4. 2.5 kHz chirps every 10 sec
+    // 4. 2.5 kHz chirps
     {
       chirpInterval = setInterval(() => {
-        const osc = context.createOscillator();
-        const gain = context.createGain();
-        osc.frequency.setValueAtTime(2500, context.currentTime);
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(2500, ctx.currentTime);
         osc.type = "square";
-        gain.gain.setValueAtTime(0.2, context.currentTime);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(
           0.001,
-          context.currentTime + 0.2
+          ctx.currentTime + 0.2
         );
-        osc.connect(gain).connect(context.destination);
+        osc.connect(gain);
+        connectOut(gain);
         osc.start();
-        osc.stop(context.currentTime + 0.2);
+        osc.stop(ctx.currentTime + 0.2);
         nodes.push(osc);
       }, 10000);
     }
 
-    // 5. 432 Hz ambient pad
+    // 5. 432 Hz pad
     {
-      const osc = context.createOscillator();
-      const gain = context.createGain();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
       osc.frequency.value = 432;
       osc.type = "triangle";
       gain.gain.value = 0.02;
-      osc.connect(gain).connect(context.destination);
+      osc.connect(gain);
+      connectOut(gain);
       osc.start();
       nodes.push(osc);
     }
 
-    // 6. Breath layer - white noise shaped like breath
+    // 6. Breath layer
     {
-      const bufferSize = 2 * context.sampleRate;
-      const noiseBuffer = context.createBuffer(
-        1,
-        bufferSize,
-        context.sampleRate
-      );
+      const bufferSize = 2 * ctx.sampleRate;
+      const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
       const output = noiseBuffer.getChannelData(0);
       for (let i = 0; i < bufferSize; i++) {
         output[i] = Math.random() * 2 - 1;
       }
 
-      const whiteNoise = context.createBufferSource();
+      const whiteNoise = ctx.createBufferSource();
       whiteNoise.buffer = noiseBuffer;
       whiteNoise.loop = true;
 
-      const noiseGain = context.createGain();
-      noiseGain.gain.setValueAtTime(0.03, context.currentTime);
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.03, ctx.currentTime);
 
-      // Breath-like pulsing
-      const lfo = context.createOscillator();
-      const lfoGain = context.createGain();
-      lfo.frequency.value = 0.25; // slow breath rate
+      const lfo = ctx.createOscillator();
+      const lfoGain = ctx.createGain();
+      lfo.frequency.value = 0.25;
       lfoGain.gain.value = 0.02;
       lfo.connect(lfoGain);
       lfoGain.connect(noiseGain.gain);
 
-      whiteNoise.connect(noiseGain).connect(context.destination);
+      whiteNoise.connect(noiseGain);
+      connectOut(noiseGain);
+
       whiteNoise.start();
       lfo.start();
-
       nodes.push(whiteNoise, lfo);
     }
   }
